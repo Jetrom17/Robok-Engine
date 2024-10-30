@@ -67,14 +67,17 @@ jobs:
       - name: Rename APK file
         run: |
           mv app-debug.apk custom-app-debug.apk
-          ls 
+          
+      - name: Compress APK to ZIP
+        run: |
+          zip -r9 custom-app-debug.zip custom-app-debug.apk
 
-      - name: Send APK to Telegram
+      - name: Send ZIP to Telegram
         if: success()
         continue-on-error: true
         run: |
           curl -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument" \
             -F chat_id="-1002327390277" \
             -F message_thread_id="30" \
-            -F document=@"custom-app-debug.apk" \
-            -F caption="App by @robokinc - ${{ github.event.head_commit.message }} by ${{ github.actor }}"
+            -F document=@"custom-app-debug.zip" \
+            -F caption="App by @USER - ${{ github.event.head_commit.message }} by ${{ github.actor }}"
