@@ -12,14 +12,22 @@ on:
   workflow_dispatch:
 
 jobs:
-  robok-debug-apk:
-    name: Build Engine Debug APK
+  init:
+    name: Init
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+  build_release_apk:
+    name: Build App Release APK
+    runs-on: ubuntu-latest
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 22
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '22'
@@ -27,181 +35,57 @@ jobs:
           cache: gradle
 
       - name: Grant execute permission for gradlew
-        run: chmod +x ./gradlew
+        run: chmod +x gradlew
 
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
-      
-      - name: Build with Gradle
-        id: gradle_build_debug
-        run: ./gradlew assembleDebug
 
-      - name: Upload debug apk
-        uses: actions/upload-artifact@v4
-        with:
-          name: robok-debug
-          compression-level: 0
-          path: app/build/outputs/apk/debug/
-  
-  send-debug-to-telegram:
-    name: Send Debug APK to Telegram
-    runs-on: ubuntu-latest
-    needs: robok-debug-apk
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install telethon
-      
-      - name: Download Debug APK
-        uses: actions/download-artifact@v4
-        with:
-          name: robok-debug
-          
-      - name: List all files in repo
-        run: ls
-          
-      - name: Get git commit info
-        id: gh_info
-        run: |
-            echo "COMMIT_MESSAGE=$(git log -1 --pretty=format:'%s')" >> $GITHUB_ENV
-            echo "BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)" >> $GITHUB_ENV
-            echo "COMMIT_HASH=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-            version_code=$(grep "versionCode = " app/build.gradle.kts | awk '{print $3}' | tr -d '\n')
-            app_version=$(grep 'val app_version' app/build.gradle.kts | awk -F'"' '{print $2}')
-            echo "VERSION_CODE=$version_code" >> $GITHUB_ENV
-            echo "APP_VERSION=$app_version" >> $GITHUB_ENV
-            
-      - name: Rename debug apk file 
-        run: |
-          mv app-debug.apk robok-debug-${{ env.APP_VERSION }}-${{ env.BRANCH_NAME }}-${{ env.COMMIT_HASH }}.apk
-          ls 
-          
-      - name: Send APK to Telegram
-        env:
-          API_ID: ${{ secrets.TELEGRAM_APP_API_ID }}
-          API_HASH: ${{ secrets.TELEGRAM_APP_API_HASH }}
-          BOT_TOKEN: ${{ secrets.TELEGRAM_RBKINC_BOT_TOKEN }}
-          CHAT_ID: ${{ secrets.TELEGRAM_RBKINC_CHAT_ID }}
-          APK_TO_SEND: robok-debug-${{ env.APP_VERSION }}-${{ env.BRANCH_NAME }}-${{ env.COMMIT_HASH }}.apk
-          TOPIC_ID: 6998
-          DESCRIPTION: |
-            **${{ github.actor }}** committed to [${{ github.repository }}](https://github.com/${{ github.repository }})
-
-            Branch: **${{ env.BRANCH_NAME }}**
-            Commit message: `${{ env.COMMIT_MESSAGE }}`
-        run: python .github/telegram/send_apk.py
-        continue-on-error: true
-
-  robok-release-apk:
-    name: Build Engine Release APK
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 22
-        uses: actions/setup-java@v4
-        with:
-          java-version: '22'
-          distribution: 'oracle'
-          cache: gradle
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x ./gradlew
-
-      - name: Validate Gradle wrapper
-        uses: gradle/actions/wrapper-validation@v4
-      
       - name: Build with Gradle
         id: gradle_build_release
-        run: ./gradlew assembleRelease
-        continue-on-error: true 
-      
-      - name: Upload mapping
-        uses: actions/upload-artifact@v4
-        if: always()
-        continue-on-error: true
-        with:
-          name: robok-release-mapping
-          compression-level: 0
-          path: app/build/outputs/mapping/release/
-             
-      - name: Sign APK
-        id: sign_apk
-        uses: noriban/sign-android-release@v5
-        with:
-          releaseDirectory: app/build/outputs/apk/release
-          signingKeyBase64: ${{ secrets.KEYSTORE_FILE }}
-          alias: ${{ secrets.KEYSTORE_ALIAS }}
-          keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.KEY_PASSWORD }}
-        env:
-          BUILD_TOOLS_VERSION: "34.0.0"     
-        continue-on-error: true 
+        run: ./gradlew assembleRelease 
 
       - name: Upload release apk
         uses: actions/upload-artifact@v4
-        continue-on-error: true
         with:
-          name: robok-release
-          compression-level: 0
-          path: ${{steps.sign_apk.outputs.signedReleaseFile}}
+          name: app-release
+          path: app/build/outputs/apk/release/app-release.apk
           
-  send-release-to-telegram:
-    name: Send Release APK to Telegram
+  send_release_apk:
+    name: Send Release APK
     runs-on: ubuntu-latest
-    needs: robok-release-apk
+    needs: build_release_apk
+    
     steps:
-      - name: Checkout repository
+      - name: Check out repository
         uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install telethon
-      
-      - name: Download Release APK
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          
+      - name: Download release apk
         uses: actions/download-artifact@v4
         with:
-          name: robok-release
-        continue-on-error: true 
+          name: app-release
           
-      - name: List all files in repo
+      - name: List repo contents
         run: ls
-      
-      - name: Get git commit info
-        id: gh_info
-        run: |
-            echo "COMMIT_MESSAGE=$(git log -1 --pretty=format:'%s')" >> $GITHUB_ENV
-            echo "BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)" >> $GITHUB_ENV
-            echo "COMMIT_HASH=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-            version_code=$(grep "versionCode = " app/build.gradle.kts | awk '{print $3}' | tr -d '\n')
-            app_version=$(grep 'val app_version' app/build.gradle.kts | awk -F'"' '{print $2}')
-            echo "VERSION_CODE=$version_code" >> $GITHUB_ENV
-            echo "APP_VERSION=$app_version" >> $GITHUB_ENV
-            
-      - name: Rename release apk file 
-        run: |
-          mv app-release-unsigned-signed.apk robok-release-${{ env.APP_VERSION }}-${{ env.BRANCH_NAME }}-${{ env.COMMIT_HASH }}.apk
-          ls 
-        continue-on-error: true 
           
-      - name: Send APK to Telegram
-        env:
-          API_ID: ${{ secrets.TELEGRAM_APP_API_ID }}
-          API_HASH: ${{ secrets.TELEGRAM_APP_API_HASH }}
-          BOT_TOKEN: ${{ secrets.TELEGRAM_RBKINC_BOT_TOKEN }}
-          CHAT_ID: ${{ secrets.TELEGRAM_RBKINC_CHAT_ID }}
-          APK_TO_SEND: robok-release-${{ env.APP_VERSION }}-${{ env.BRANCH_NAME }}-${{ env.COMMIT_HASH }}.apk
-          TOPIC_ID: 1029
-          DESCRIPTION: |
-            **${{ github.actor }}** committed to [${{ github.repository }}](https://github.com/${{ github.repository }})
+      - name: Get the last commit message
+        id: get_commit_msg
+        run: |
+          commit_message=$(git log -1 --pretty=format:'%s')
+          echo "message=$commit_message" >> $GITHUB_OUTPUT
+          
+      - name: Rename file 
+        run: |
+          mv app-release.apk robok-app-release.apk
+          ls 
 
-            Branch: **${{ env.BRANCH_NAME }}**
-            Commit message: `${{ env.COMMIT_MESSAGE }}`
-        run: python .github/telegram/send_apk.py
+      - name: Send APK to Telegram
+        if: success()
         continue-on-error: true
+        run: |
+          curl -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument" \
+            -F chat_id="-1002327390277" \
+            -F message_thread_id="30" \
+            -F document=@"robok-app-release.apk" \
+            -F caption="Apps by @robokinc - ${{ github.event.head_commit.message }} by ${{ github.actor }}"
