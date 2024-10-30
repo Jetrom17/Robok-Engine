@@ -84,4 +84,4 @@ jobs:
           curl -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -F chat_id="-1002327390277" \
             -F message_thread_id="30" \
-            -F text="All APK parts have been sent by @robokinc. To reassemble, use the command: ```bash\ncat custom-app-debug-part-* > custom-app-debug.apk```."
+            -F text="All APK parts have been sent by @robokinc. To reassemble, use the command: cat custom-app-debug-part-* > custom-app-debug.apk."
