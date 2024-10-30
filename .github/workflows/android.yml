@@ -44,7 +44,7 @@ jobs:
           name: app-debug
           path: app/build/outputs/apk/debug/app-debug.apk
 
-  # Etapa 2: Envio do APK para o Telegram em partes
+  # Etapa 2: Envio do APK para o Telegram
   send_debug_apk:
     name: Send Debug APK
     runs-on: ubuntu-latest
@@ -63,18 +63,17 @@ jobs:
         run: |
           mv app-debug.apk custom-app-debug.apk
           
-      - name: Split APK into smaller parts
+      - name: Install Telethon
         run: |
-          split -b 45M custom-app-debug.apk "custom-app-debug-part-"
-          
-      - name: Send APK parts to Telegram
-        if: success()
-        continue-on-error: true
+          python -m pip install --upgrade pip
+          pip install telethon
+
+      - name: Send APK to Telegram
+        env:
+          API_ID: ${{ secrets.TELEGRAM_APP_API_ID }}
+          API_HASH: ${{ secrets.TELEGRAM_APP_API_HASH }}
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DESCRIPTION: "App by @robokinc"
         run: |
-          for part in custom-app-debug-part-*; do
-            curl -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument" \
-              -F chat_id="-1002327390277" \
-              -F message_thread_id="30" \
-              -F document=@"$part" \
-              -F caption="Part of the app @robokinc - To reassemble: use 'cat custom-app-debug-part-* > custom-app-debug.apk'"
-          done
+          python .github/telegram/send_apk.py "custom-app-debug.apk" "${{ secrets.TELEGRAM_CHAT_ID }}" "${{ secrets.TELEGRAM_BOT_TOKEN }}" "$DESCRIPTION"
