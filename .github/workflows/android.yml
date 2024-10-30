@@ -12,13 +12,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  init:
-    name: Init
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
+  # Etapa 1: Build do APK
   build_debug_apk:
     name: Build App Debug APK
     runs-on: ubuntu-latest
@@ -50,6 +44,7 @@ jobs:
           name: app-debug
           path: app/build/outputs/apk/debug/app-debug.apk
 
+  # Etapa 2: Envio do APK para o Telegram em partes
   send_debug_apk:
     name: Send Debug APK
     runs-on: ubuntu-latest
@@ -68,16 +63,18 @@ jobs:
         run: |
           mv app-debug.apk custom-app-debug.apk
           
-      - name: Compress APK to ZIP
+      - name: Split APK into smaller parts
         run: |
-          zip -r9 custom-app-debug.zip custom-app-debug.apk
-
-      - name: Send ZIP to Telegram
+          split -b 45M custom-app-debug.apk "custom-app-debug-part-"
+          
+      - name: Send APK parts to Telegram
         if: success()
         continue-on-error: true
         run: |
-          curl -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument" \
-            -F chat_id="-1002327390277" \
-            -F message_thread_id="30" \
-            -F document=@"custom-app-debug.zip" \
-            -F caption="App by @robokinc - ${{ github.event.head_commit.message }} by ${{ github.actor }}"
+          for part in custom-app-debug-part-*; do
+            curl -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument" \
+              -F chat_id="-1002327390277" \
+              -F message_thread_id="30" \
+              -F document=@"$part" \
+              -F caption="Part of the app @robokinc - To reassemble: use 'cat custom-app-debug-part-* > custom-app-debug.apk'"
+          done
